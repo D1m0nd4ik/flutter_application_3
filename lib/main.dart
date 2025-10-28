@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_3/database/database_helper.dart';
+import 'package:flutter_application_3/models/calculation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/cubit/history_cubit.dart';
+import 'screens/history_screen.dart';
+
 
 void main() {
   runApp(const MyApp());
@@ -9,10 +16,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Калькулятор простых процентов',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(),
+    return BlocProvider( 
+      create: (context) => HistoryCubit(),
+      child: MaterialApp(
+        title: 'Калькулятор простых процентов',
+        theme: ThemeData(primarySwatch: Colors.blue),
+        home: const HomeScreen(),
+      ),        
     );
   }
 }
@@ -66,8 +76,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Флоря Дмитрий Александрович'), // Ваше ФИО
+        title: const Text('Флоря Дмитрий Александрович'),
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.history),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HistoryScreen()),
+            );
+          },
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -144,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // Экран с результатом
-class ResultScreen extends StatelessWidget {
+// Экран с результатом — обновленный
+class ResultScreen extends StatefulWidget {
   final double capital;
   final int term;
   final double rate;
@@ -156,14 +176,40 @@ class ResultScreen extends StatelessWidget {
     required this.rate,
   });
 
-  double calculateSimpleInterest() {
-    return capital * (1 + (rate / 100) * term);
+  @override
+  State<ResultScreen> createState() => _ResultScreenState();
+}
+
+class _ResultScreenState extends State<ResultScreen> {
+  late final double result;
+
+  @override
+  void initState() {
+    super.initState();
+    result = widget.capital * (1 + (widget.rate / 100) * widget.term);
+
+    // Сохраняем один раз при создании экрана
+    _saveData();
+  }
+
+  Future<void> _saveData() async {
+    // SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setDouble('last_result', result);
+
+    // SQFlite через кубит
+    final newCalc = Calculation(
+      capital: widget.capital,
+      term: widget.term,
+      rate: widget.rate,
+      result: result,
+      createdAt: DateTime.now(),
+    );
+    context.read<HistoryCubit>().addCalculation(newCalc);
   }
 
   @override
   Widget build(BuildContext context) {
-    final result = calculateSimpleInterest();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Результат расчета'),
@@ -179,11 +225,11 @@ class ResultScreen extends StatelessWidget {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            Text('Исходный капитал: ${capital.toStringAsFixed(2)} ₽'),
+            Text('Исходный капитал: ${widget.capital.toStringAsFixed(2)} ₽'),
             const SizedBox(height: 8),
-            Text('Срок: $term лет'),
+            Text('Срок: ${widget.term} лет'),
             const SizedBox(height: 8),
-            Text('Ставка: $rate%'),
+            Text('Ставка: ${widget.rate}%'),
             const SizedBox(height: 20),
             const Divider(),
             const SizedBox(height: 20),
